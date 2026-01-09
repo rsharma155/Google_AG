@@ -79,13 +79,6 @@ AND wait_type NOT IN (
 """
 
 # User Error Logs (Recent errors - Sev > 10)
-# Note: xp_readerrorlog can be slow if log is huge. We limit to last 30 minutes if possible, but the procedure parameters are (Filenum, LogType, SearchString1, SearchString2, StartTime, EndTime).
-# Since calling with dates from python is safer, we will just read the last N rows or use a python filter. 
-# However, for a metric collector, counting errors is usually better.
-# We will count errors in sys.messages logic or actually just reading ring buffer is safer/lighter for connectivity errors.
-# Let's try to get error counts from sys.dm_os_ring_buffers as well for connectivity, but real errors are in logs.
-# Warning: xp_readerrorlog is blocking and heavy. 
-# ALTERNATIVE: sys.dm_os_ring_buffers for 'RING_BUFFER_EXCEPTION'
 GET_RECENT_EXCEPTIONS = """
 SELECT TOP 20
     Error = record.value('(./Record/Exception/Error)[1]', 'int'),
@@ -145,6 +138,43 @@ FROM sys.dm_exec_query_stats qs
 CROSS APPLY sys.dm_exec_sql_text(qs.sql_handle) qt
 CROSS APPLY sys.dm_exec_query_plan(qs.plan_handle) qp
 ORDER BY qs.total_worker_time DESC;
+"""
+
+# Top 10 by I/O (Reads + Writes)
+GET_TOP_IO_QUERIES = """
+SELECT TOP 10
+    qs.execution_count,
+    (qs.total_logical_reads + qs.total_logical_writes) AS total_io,
+    (qs.total_logical_reads + qs.total_logical_writes) / ISNULL(NULLIF(qs.execution_count, 0), 1) AS avg_io,
+    qs.total_elapsed_time / 1000 AS total_duration_ms,
+    SUBSTRING(qt.text, (qs.statement_start_offset/2)+1,
+        ((CASE qs.statement_end_offset
+            WHEN -1 THEN DATALENGTH(qt.text)
+            ELSE qs.statement_end_offset
+        END - qs.statement_start_offset)/2) + 1) AS query_text,
+    DB_NAME(qp.dbid) AS database_name
+FROM sys.dm_exec_query_stats qs
+CROSS APPLY sys.dm_exec_sql_text(qs.sql_handle) qt
+CROSS APPLY sys.dm_exec_query_plan(qs.plan_handle) qp
+ORDER BY (qs.total_logical_reads + qs.total_logical_writes) DESC;
+"""
+
+# Long Running Queries (> Threshold)
+GET_LONG_RUNNING_QUERIES = """
+SELECT TOP 10
+    r.session_id,
+    r.status,
+    r.total_elapsed_time / 1000.0 AS duration_seconds,
+    r.cpu_time / 1000.0 AS cpu_seconds,
+    r.wait_type,
+    r.wait_time / 1000.0 AS wait_seconds,
+    t.text AS query_text,
+    DB_NAME(r.database_id) AS database_name
+FROM sys.dm_exec_requests r
+CROSS APPLY sys.dm_exec_sql_text(r.sql_handle) t
+WHERE r.status <> 'background'
+AND r.total_elapsed_time > 1000 -- More than 1 second (configurable effectively by just picking top)
+ORDER BY r.total_elapsed_time DESC;
 """
 
 # Failed Jobs (Last 24 hours)

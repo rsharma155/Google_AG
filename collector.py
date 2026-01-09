@@ -4,7 +4,8 @@ import time
 from prometheus_client import Gauge, Info, Counter
 from queries import (
     GET_CPU_USAGE, GET_MEMORY_USAGE, GET_IO_STATS, GET_WAIT_STATS,
-    GET_ACTIVE_SESSIONS, GET_TOP_CPU_QUERIES, GET_FAILED_JOBS, GET_DB_STATES,
+    GET_ACTIVE_SESSIONS, GET_TOP_CPU_QUERIES, GET_TOP_IO_QUERIES, 
+    GET_LONG_RUNNING_QUERIES, GET_FAILED_JOBS, GET_DB_STATES,
     GET_RECENT_EXCEPTIONS
 )
 
@@ -19,6 +20,12 @@ SQL_BLOCKING_SESSIONS = Gauge('sql_blocking_sessions', 'Number of blocking sessi
 SQL_DB_STATE = Gauge('sql_database_state', 'Database state (1=Online)', ['database', 'state_desc'])
 SQL_FAILED_JOBS = Gauge('sql_failed_jobs_today', 'Count of failed jobs today', ['job_name'])
 SQL_ERROR_LOG_COUNT = Gauge('sql_error_log_recent_count', 'Count of recent severe errors')
+
+# New Metrics for Query Performance
+SQL_TOP_QUERY_CPU = Gauge('sql_top_query_cpu_ms', 'Top Queries by CPU', ['query_text_short', 'database'])
+SQL_TOP_QUERY_IO = Gauge('sql_top_query_io_ops', 'Top Queries by I/O', ['query_text_short', 'database'])
+SQL_LONG_RUNNING_QUERY = Gauge('sql_long_running_query_duration_seconds', 'Long Running Queries', ['session_id', 'query_text_short', 'database'])
+
 
 class MetricsCollector:
     def __init__(self, config):
@@ -37,6 +44,7 @@ class MetricsCollector:
 
     def connect(self):
         try:
+            self.logger.info("Attempting to connect to SQL Server...")
             self.conn = pyodbc.connect(self.connection_string, timeout=10)
             SQL_UP.set(1)
             self.logger.info("Connected to SQL Server")
@@ -52,8 +60,9 @@ class MetricsCollector:
         if not self.conn:
             return
 
-        cursor = self.conn.cursor()
+        cursor = None
         try:
+            cursor = self.conn.cursor()
             self._collect_cpu(cursor)
             self._collect_memory(cursor)
             self._collect_io(cursor)
@@ -62,17 +71,27 @@ class MetricsCollector:
             self._collect_db_states(cursor)
             self._collect_jobs(cursor)
             self._collect_errors(cursor)
+            
+            # New Metrics
+            self._collect_top_cpu_queries(cursor)
+            self._collect_top_io_queries(cursor)
+            self._collect_long_running_queries(cursor)
+            
         except pyodbc.Error as e:
-            self.logger.error(f"Error during collection: {e}")
+            self.logger.error(f"Error during collection (Connection Lost?): {e}")
             SQL_UP.set(0)
-            # Try to reconnect next time
+            # Force close and reset connection
             try:
-                self.conn.close()
+                if cursor: cursor.close()
+                if self.conn: self.conn.close()
             except:
                 pass
             self.conn = None
+            self.logger.info("Connection reset. Will attempt reconnect on next cycle.")
         finally:
-            cursor.close()
+            if cursor:
+                try: cursor.close()
+                except: pass
 
     def _collect_cpu(self, cursor):
         try:
@@ -189,3 +208,45 @@ class MetricsCollector:
             SQL_ERROR_LOG_COUNT.set(count)
         except Exception as e:
             self.logger.debug(f"Failed to collect Errors: {e}")
+
+    def _collect_top_cpu_queries(self, cursor):
+        try:
+            cursor.execute(GET_TOP_CPU_QUERIES)
+            rows = cursor.fetchall()
+            # We clean the previous metric values?? Prometheus Gauges stick.
+            # Ideally we'd timestamp or use summary. But for gauge default behavior,
+            # this works "ok" if we assume Top 10 changes often or we just show snapshots.
+            # Warning: This creates high cardinality if many unique queries appeared.
+            # Solution: We should clear? or Use truncated text.
+            # For now, we rely on Prometheus to handle it, but in long run might need clearing.
+            
+            # Since we can't easily "clear" without knowing labelset, we just set.
+            for row in rows:
+                text_short = (row.query_text or "")[:50].replace('\n', ' ').strip()
+                SQL_TOP_QUERY_CPU.labels(query_text_short=text_short, database=row.database_name).set(row.avg_cpu_ms)
+        except Exception as e:
+            self.logger.warning(f"Failed to collect Top CPU Queries: {e}")
+
+    def _collect_top_io_queries(self, cursor):
+        try:
+            cursor.execute(GET_TOP_IO_QUERIES)
+            rows = cursor.fetchall()
+            for row in rows:
+                text_short = (row.query_text or "")[:50].replace('\n', ' ').strip()
+                SQL_TOP_QUERY_IO.labels(query_text_short=text_short, database=row.database_name).set(row.avg_io)
+        except Exception as e:
+            self.logger.warning(f"Failed to collect Top IO Queries: {e}")
+
+    def _collect_long_running_queries(self, cursor):
+        try:
+            cursor.execute(GET_LONG_RUNNING_QUERIES)
+            rows = cursor.fetchall()
+            for row in rows:
+                text_short = (row.query_text or "")[:50].replace('\n', ' ').strip()
+                SQL_LONG_RUNNING_QUERY.labels(
+                    session_id=str(row.session_id), 
+                    query_text_short=text_short, 
+                    database=row.database_name
+                ).set(row.duration_seconds)
+        except Exception as e:
+            self.logger.warning(f"Failed to collect Long Running Queries: {e}")

@@ -250,6 +250,120 @@
             ],
             "title": "Top 5 Waits (Rate ms/s)",
             "type": "timeseries"
+        },
+        {
+            "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+            },
+            "gridPos": {
+                "h": 8,
+                "w": 12,
+                "x": 0,
+                "y": 24
+            },
+            "id": 7,
+            "options": {
+                "legend": {
+                    "calcs": [],
+                    "displayMode": "list",
+                    "placement": "bottom",
+                    "showLegend": false
+                },
+                "tooltip": {
+                    "mode": "single",
+                    "sort": "none"
+                }
+            },
+            "targets": [
+                {
+                    "datasource": {
+                        "type": "prometheus",
+                        "uid": "${DS_PROMETHEUS}"
+                    },
+                    "expr": "topk(10, sql_top_query_cpu_ms)",
+                    "legendFormat": "{{query_text_short}}",
+                    "refId": "A"
+                }
+            ],
+            "title": "Top Queries (by CPU)",
+            "type": "barchart"
+        },
+        {
+            "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+            },
+            "gridPos": {
+                "h": 8,
+                "w": 12,
+                "x": 12,
+                "y": 24
+            },
+            "id": 8,
+            "options": {
+                "legend": {
+                    "calcs": [],
+                    "displayMode": "list",
+                    "placement": "bottom",
+                    "showLegend": false
+                },
+                "tooltip": {
+                    "mode": "single",
+                    "sort": "none"
+                }
+            },
+            "targets": [
+                {
+                    "datasource": {
+                        "type": "prometheus",
+                        "uid": "${DS_PROMETHEUS}"
+                    },
+                    "expr": "topk(10, sql_top_query_io_ops)",
+                    "legendFormat": "{{query_text_short}}",
+                    "refId": "A"
+                }
+            ],
+            "title": "Top Queries (by I/O)",
+            "type": "barchart"
+        },
+        {
+            "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+            },
+            "gridPos": {
+                "h": 6,
+                "w": 24,
+                "x": 0,
+                "y": 32
+            },
+            "id": 9,
+            "options": {
+                "legend": {
+                    "calcs": [],
+                    "displayMode": "list",
+                    "placement": "bottom",
+                    "showLegend": true
+                },
+                "tooltip": {
+                    "mode": "single",
+                    "sort": "none"
+                }
+            },
+            "targets": [
+                {
+                    "datasource": {
+                        "type": "prometheus",
+                        "uid": "${DS_PROMETHEUS}"
+                    },
+                    "expr": "sql_long_running_query_duration_seconds",
+                    "legendFormat": "{{session_id}}: {{query_text_short}}",
+                    "refId": "A"
+                }
+            ],
+            "title": "Long Running Queries (>30s)",
+            "type": "table"
         }
     ],
     "refresh": "",
@@ -277,7 +391,7 @@
     "timepicker": {},
     "timezone": "",
     "title": "SQL Server Metrics",
-    "uid": "sql-server-metrics-v1",
+    "uid": "sql-server-metrics-v2",
     "version": 0,
     "weekStart": ""
 }
