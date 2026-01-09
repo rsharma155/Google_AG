@@ -1,0 +1,17 @@
+# SQL Server Connection Details
+server: "192.168.1.10,1433"
+database: "master"
+username: "sa"
+password: "Hello@123"
+driver: "{ODBC Driver 18 for SQL Server}"
+encrypt: "no"
+trust_server_certificate: "yes" # yes/no
+
+# Collection Settings
+collection_interval_seconds: 15
+export_port: 8000
+
+# Feature Toggles
+detect_locks: true
+detect_long_running_queries: true
+long_query_threshold_seconds: 30
