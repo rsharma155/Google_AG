@@ -222,7 +222,7 @@ class MetricsCollector:
             
             # Since we can't easily "clear" without knowing labelset, we just set.
             for row in rows:
-                text_short = (row.query_text or "")[:50].replace('\n', ' ').strip()
+                text_short = (row.query_text or "")[:500].replace('\n', ' ').strip()
                 SQL_TOP_QUERY_CPU.labels(query_text_short=text_short, database=row.database_name).set(row.avg_cpu_ms)
         except Exception as e:
             self.logger.warning(f"Failed to collect Top CPU Queries: {e}")
@@ -232,7 +232,7 @@ class MetricsCollector:
             cursor.execute(GET_TOP_IO_QUERIES)
             rows = cursor.fetchall()
             for row in rows:
-                text_short = (row.query_text or "")[:50].replace('\n', ' ').strip()
+                text_short = (row.query_text or "")[:500].replace('\n', ' ').strip()
                 SQL_TOP_QUERY_IO.labels(query_text_short=text_short, database=row.database_name).set(row.avg_io)
         except Exception as e:
             self.logger.warning(f"Failed to collect Top IO Queries: {e}")
@@ -242,7 +242,7 @@ class MetricsCollector:
             cursor.execute(GET_LONG_RUNNING_QUERIES)
             rows = cursor.fetchall()
             for row in rows:
-                text_short = (row.query_text or "")[:50].replace('\n', ' ').strip()
+                text_short = (row.query_text or "")[:500].replace('\n', ' ').strip()
                 SQL_LONG_RUNNING_QUERY.labels(
                     session_id=str(row.session_id), 
                     query_text_short=text_short, 

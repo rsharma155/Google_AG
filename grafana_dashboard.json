@@ -297,7 +297,7 @@
                 }
             ],
             "title": "Top Queries (by CPU)",
-            "type": "barchart"
+            "type": "table"
         },
         {
             "datasource": {
